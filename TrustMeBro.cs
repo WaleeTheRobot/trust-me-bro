@@ -126,65 +126,82 @@ namespace NinjaTrader.NinjaScript.Indicators
         }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Upper Fill Color", Description = "Color for the upper fill and border", GroupName = GROUP_NAME_PLOTS, Order = 4)]
         public Brush UpperFillColor { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Lower Fill Color", Description = "Color for the lower fill and border", GroupName = GROUP_NAME_PLOTS, Order = 5)]
         public Brush LowerFillColor { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Trend Line Color", Description = "The trend line color.", GroupName = GROUP_NAME_PLOTS, Order = 6)]
         public Brush TrendLineColor { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Trend Line Dash Style", GroupName = GROUP_NAME_PLOTS, Order = 7)]
         public DashStyleHelper TrendLineDashStyle { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Trend Line Width", GroupName = GROUP_NAME_PLOTS, Order = 8)]
         public int TrendLineWidth { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Level Color", Description = "The level color.", GroupName = GROUP_NAME_PLOTS, Order = 9)]
         public Brush LevelColor { get; set; }
+
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Level Dash Style", GroupName = GROUP_NAME_PLOTS, Order = 10)]
         public DashStyleHelper LevelDashStyle { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Level Width", GroupName = GROUP_NAME_PLOTS, Order = 11)]
         public int LevelWidth { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "ATR Upper Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 12)]
         public byte ATRUpperOpacity { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "ATR Lower Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 13)]
         public byte ATRLowerOpacity { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "EMA Upper Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 14)]
         public byte EMAUpperOpacity { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "EMA Lower Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 15)]
         public byte EMALowerOpacity { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Upper Fill Opacity", Description = "The opacity for the upper fill. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 16)]
         public byte UpperFillOpacity { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Lower Fill Opacity", Description = "The opacity for the lower fill. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 17)]
         public byte LowerFillOpacity { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Trend Line Opacity", Description = "The opacity for the trend line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 18)]
         public byte TrendLineOpacity { get; set; }
 
         [NinjaScriptProperty]
+        [XmlIgnore]
         [Display(Name = "Level Opacity", Description = "The opacity for the levels. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 19)]
         public byte LevelOpacity { get; set; }
 
