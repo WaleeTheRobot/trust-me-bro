@@ -18,4 +18,5 @@
 “It’s called Trust Me, Bro. I trusted. It delivered.” – You
 
 Add-On Download: https://github.com/WaleeTheRobot/trust-me-bro/releases
+
 NinjaTrader Ecosystem: https://ninjatraderecosystem.com/user-app-share-download/trust-me-bro-atr-ema-trend-line-and-levels
