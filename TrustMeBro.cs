@@ -1,18 +1,22 @@
 using NinjaTrader.Gui;
 using NinjaTrader.Gui.Chart;
 using NinjaTrader.NinjaScript.DrawingTools;
+using NinjaTrader.NinjaScript.Indicators;
 using SharpDX;
 using SharpDX.Direct2D1;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Windows.Media;
 using System.Xml.Serialization;
+using TrustMeBroPivots;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 
-namespace NinjaTrader.NinjaScript.Indicators
+
+namespace TrustMeBroPivots
 {
     public class PivotBar
     {
@@ -39,6 +43,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         public int BrokenBarNumber { get; set; }
         public bool IsBroken { get; set; }
         public bool DisplayLevel { get; set; }
+        public bool IsDrawn { get; set; }
 
         public PivotPoint(PivotBar pivotBar, bool isHigh, int brokenBarNumber = 0, bool isBroken = false, bool displayLevel = true)
         {
@@ -47,7 +52,18 @@ namespace NinjaTrader.NinjaScript.Indicators
             BrokenBarNumber = brokenBarNumber;
             IsBroken = isBroken;
             DisplayLevel = displayLevel;
+            IsDrawn = false;
         }
+    }
+
+}
+
+namespace NinjaTrader.NinjaScript.Indicators
+{
+    public enum LevelPriceType
+    {
+        Close,
+        HighLow
     }
 
     public class TrustMeBro : Indicator
@@ -68,12 +84,20 @@ namespace NinjaTrader.NinjaScript.Indicators
         private int _maxHighBar, _minLowBar;
         private double _tickSize;
 
+        private static readonly string[] _brushProps = {
+            nameof(UpperFillColor),
+            nameof(LowerFillColor),
+            nameof(FormingFillColor),
+            nameof(TrendLineColor),
+            nameof(LevelColor)
+        };
+
         #region General Properties
 
         [NinjaScriptProperty]
         [Display(Name = "Version", Description = "Trust Me Bro Version", Order = 0, GroupName = GROUP_NAME_GENERAL)]
         [ReadOnly(true)]
-        public string Version => "1.0.1";
+        public string Version => "1.1.0";
 
         #endregion
 
@@ -88,6 +112,15 @@ namespace NinjaTrader.NinjaScript.Indicators
         [Display(Name = "Threshold Ticks", Description = "Threshold to include with levels to consider broken", GroupName = GROUP_NAME_TRUST_ME_BRO, Order = 1)]
         public int ThresholdTicks
         { get; set; }
+
+        [Range(1, int.MaxValue), NinjaScriptProperty]
+        [Display(Name = "Pivot Limit", Description = "Limit the number of pivots to increase performance. This will stop extending levels after the pivot limit.", GroupName = GROUP_NAME_TRUST_ME_BRO, Order = 2)]
+        public int PivotLimit
+        { get; set; }
+
+        [NinjaScriptProperty]
+        [Display(Name = "Level Price Type", Description = "Price to use for pivot levels", GroupName = GROUP_NAME_TRUST_ME_BRO, Order = 3)]
+        public LevelPriceType LevelPriceType { get; set; }
 
         #endregion
 
@@ -137,72 +170,82 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Trend Line Color", Description = "The trend line color.", GroupName = GROUP_NAME_PLOTS, Order = 6)]
+        [Display(Name = "Forming Fill Color", Description = "Color for the upper and lower forming fill", GroupName = GROUP_NAME_PLOTS, Order = 6)]
+        public Brush FormingFillColor { get; set; }
+
+        [NinjaScriptProperty]
+        [XmlIgnore]
+        [Display(Name = "Trend Line Color", Description = "The trend line color.", GroupName = GROUP_NAME_PLOTS, Order = 7)]
         public Brush TrendLineColor { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Trend Line Dash Style", GroupName = GROUP_NAME_PLOTS, Order = 7)]
+        [Display(Name = "Trend Line Dash Style", GroupName = GROUP_NAME_PLOTS, Order = 8)]
         public DashStyleHelper TrendLineDashStyle { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Trend Line Width", GroupName = GROUP_NAME_PLOTS, Order = 8)]
+        [Display(Name = "Trend Line Width", GroupName = GROUP_NAME_PLOTS, Order = 9)]
         public int TrendLineWidth { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Level Color", Description = "The level color.", GroupName = GROUP_NAME_PLOTS, Order = 9)]
+        [Display(Name = "Level Color", Description = "The level color.", GroupName = GROUP_NAME_PLOTS, Order = 10)]
         public Brush LevelColor { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Level Dash Style", GroupName = GROUP_NAME_PLOTS, Order = 10)]
+        [Display(Name = "Level Dash Style", GroupName = GROUP_NAME_PLOTS, Order = 11)]
         public DashStyleHelper LevelDashStyle { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Level Width", GroupName = GROUP_NAME_PLOTS, Order = 11)]
+        [Display(Name = "Level Width", GroupName = GROUP_NAME_PLOTS, Order = 12)]
         public int LevelWidth { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "ATR Upper Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 12)]
+        [Display(Name = "ATR Upper Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 13)]
         public byte ATRUpperOpacity { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "ATR Lower Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 13)]
+        [Display(Name = "ATR Lower Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 14)]
         public byte ATRLowerOpacity { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "EMA Upper Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 14)]
+        [Display(Name = "EMA Upper Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 15)]
         public byte EMAUpperOpacity { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "EMA Lower Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 15)]
+        [Display(Name = "EMA Lower Opacity", Description = "The opacity for the line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 16)]
         public byte EMALowerOpacity { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Upper Fill Opacity", Description = "The opacity for the upper fill. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 16)]
+        [Display(Name = "Upper Fill Opacity", Description = "The opacity for the upper fill. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 17)]
         public byte UpperFillOpacity { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Lower Fill Opacity", Description = "The opacity for the lower fill. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 17)]
+        [Display(Name = "Lower Fill Opacity", Description = "The opacity for the lower fill. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 18)]
         public byte LowerFillOpacity { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Trend Line Opacity", Description = "The opacity for the trend line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 18)]
+        [Display(Name = "Forming Fill Opacity", Description = "The opacity for the upper and lower forming fill. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 19)]
+        public byte FormingFillOpacity { get; set; }
+
+        [NinjaScriptProperty]
+        [XmlIgnore]
+        [Display(Name = "Trend Line Opacity", Description = "The opacity for the trend line. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 20)]
         public byte TrendLineOpacity { get; set; }
 
         [NinjaScriptProperty]
         [XmlIgnore]
-        [Display(Name = "Level Opacity", Description = "The opacity for the levels. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 19)]
+        [Display(Name = "Level Opacity", Description = "The opacity for the levels. (0 to 255)", GroupName = GROUP_NAME_PLOTS, Order = 21)]
         public byte LevelOpacity { get; set; }
 
         #endregion
@@ -210,31 +253,25 @@ namespace NinjaTrader.NinjaScript.Indicators
         #region Serialization
 
         [Browsable(false)]
-        public string UpperFillColorSerialize
+        [XmlIgnore]
+        public string ColorsSerialize
         {
-            get => Serialize.BrushToString(UpperFillColor);
-            set => UpperFillColor = Serialize.StringToBrush(value);
-        }
-
-        [Browsable(false)]
-        public string LowerFillColorSerialize
-        {
-            get => Serialize.BrushToString(LowerFillColor);
-            set => LowerFillColor = Serialize.StringToBrush(value);
-        }
-
-        [Browsable(false)]
-        public string TrendLineColorSerialize
-        {
-            get => Serialize.BrushToString(TrendLineColor);
-            set => TrendLineColor = Serialize.StringToBrush(value);
-        }
-
-        [Browsable(false)]
-        public string LevelColorSerialize
-        {
-            get => Serialize.BrushToString(LevelColor);
-            set => LevelColor = Serialize.StringToBrush(value);
+            get
+            {
+                var parts = _brushProps
+                    .Select(p => (Brush)GetType().GetProperty(p).GetValue(this))
+                    .Select(b => Serialize.BrushToString(b));
+                return string.Join(";", parts);
+            }
+            set
+            {
+                var parts = value.Split(';');
+                for (int i = 0; i < parts.Length && i < _brushProps.Length; i++)
+                {
+                    var prop = GetType().GetProperty(_brushProps[i]);
+                    prop.SetValue(this, Serialize.StringToBrush(parts[i]));
+                }
+            }
         }
 
         #endregion
@@ -257,12 +294,15 @@ namespace NinjaTrader.NinjaScript.Indicators
 
                 Period = 3;
                 ThresholdTicks = 8;
+                PivotLimit = 150;
+                LevelPriceType = LevelPriceType.Close;
                 ATRUpperOpacity = 0;
                 ATRLowerOpacity = 0;
                 EMAUpperOpacity = 0;
                 EMALowerOpacity = 0;
                 UpperFillOpacity = 20;
                 LowerFillOpacity = 20;
+                FormingFillOpacity = 20;
                 TrendLineOpacity = 150;
                 LevelOpacity = 100;
 
@@ -272,6 +312,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 AddPlot(Brushes.DarkGreen, "EMA Lower");
                 UpperFillColor = Brushes.DarkRed;
                 LowerFillColor = Brushes.DarkGreen;
+                FormingFillColor = Brushes.SlateGray;
                 TrendLineColor = Brushes.Gold;
                 TrendLineDashStyle = DashStyleHelper.Solid;
                 TrendLineWidth = 2;
@@ -286,7 +327,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 _ema = EMA(Period);
                 _atr = ATR(Period);
                 _previousBar = new PivotBar(CurrentBar, 0, 0, 0, 0);
-                _pivots = new List<PivotPoint>();
+                _pivots = new List<PivotPoint>(PivotLimit);
                 _currentPivot = new PivotPoint(null, false);
                 _currentMaxHigh = 0;
                 _maxHighBar = 0;
@@ -305,7 +346,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         protected override void OnBarUpdate()
         {
-            if (CurrentBar < Period)
+            if (CurrentBar <= Period)
             {
                 ATRUpper.Reset();
                 ATRLower.Reset();
@@ -316,9 +357,11 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
 
             ProcessPivotPoint();
-            UpdatePivotStatus();
-            DrawHistoricalZigZag();
-            DrawPivotLevels();
+            if (IsFirstTickOfBar)
+            {
+                UpdatePivotStatus();
+                DrawPivotLevels();
+            }
             DrawFill();
         }
 
@@ -383,18 +426,16 @@ namespace NinjaTrader.NinjaScript.Indicators
             _previousBar = new PivotBar(CurrentBar - 1, Open[1], High[1], Low[1], Close[1]);
 
             if (IsFirstPivot())
-            {
                 return;
-            }
+
+            // Skip inside bar
+            if (High[0] < High[1] && Low[0] > Low[1])
+                return;
 
             if (_isLookingForHigh)
-            {
                 IsLookingForHigh();
-            }
             else
-            {
                 IsLookingForLow();
-            }
         }
 
         private bool IsFirstPivot()
@@ -437,6 +478,37 @@ namespace NinjaTrader.NinjaScript.Indicators
                     High.GetValueAt(_maxHighBar), Low.GetValueAt(_maxHighBar), Close.GetValueAt(_maxHighBar));
                 PivotPoint swingHigh = new PivotPoint(swingHighBar, true);
                 _pivots.Add(swingHigh);
+
+                // Draw the zig-zag line for the new pivot
+                if (_pivots.Count >= 2)
+                {
+                    PivotPoint pivotA = _pivots[_pivots.Count - 2];
+                    PivotPoint pivotB = _pivots[_pivots.Count - 1];
+                    int barsAgoA = CurrentBar - pivotA.PivotBar.BarNumber;
+                    int barsAgoB = CurrentBar - pivotB.PivotBar.BarNumber;
+                    double priceA = GetPivotPrice(pivotA);
+                    double priceB = GetPivotPrice(pivotB);
+                    SolidColorBrush solidBrush = TrendLineColor as SolidColorBrush;
+                    if (solidBrush != null)
+                    {
+                        Color baseColor = solidBrush.Color;
+                        Color lineColorWithOpacity = Color.FromArgb(TrendLineOpacity, baseColor.R, baseColor.G, baseColor.B);
+                        SolidColorBrush brushWithOpacity = new SolidColorBrush(lineColorWithOpacity);
+                        string tag = $"zigzag_{pivotA.PivotBar.BarNumber}_{pivotB.PivotBar.BarNumber}";
+                        Draw.Line(this, tag, false, barsAgoA, priceA, barsAgoB, priceB, brushWithOpacity, TrendLineDashStyle, TrendLineWidth);
+                    }
+                }
+
+                if (_pivots.Count > PivotLimit)
+                {
+                    PivotPoint oldPivot = _pivots[0];
+                    if (oldPivot.IsDrawn)
+                    {
+                        RemoveDrawObject($"pivot_{oldPivot.PivotBar.BarNumber}");
+                    }
+                    _pivots.RemoveAt(0);
+                }
+
                 _isLookingForHigh = false;
                 _currentMinLow = Low[0];
                 _minLowBar = CurrentBar;
@@ -456,6 +528,37 @@ namespace NinjaTrader.NinjaScript.Indicators
                     High.GetValueAt(_minLowBar), Low.GetValueAt(_minLowBar), Close.GetValueAt(_minLowBar));
                 PivotPoint swingLow = new PivotPoint(swingLowBar, false);
                 _pivots.Add(swingLow);
+
+                // Draw zig-zag line for the new pivot
+                if (_pivots.Count >= 2)
+                {
+                    PivotPoint pivotA = _pivots[_pivots.Count - 2];
+                    PivotPoint pivotB = _pivots[_pivots.Count - 1];
+                    int barsAgoA = CurrentBar - pivotA.PivotBar.BarNumber;
+                    int barsAgoB = CurrentBar - pivotB.PivotBar.BarNumber;
+                    double priceA = GetPivotPrice(pivotA);
+                    double priceB = GetPivotPrice(pivotB);
+                    SolidColorBrush solidBrush = TrendLineColor as SolidColorBrush;
+                    if (solidBrush != null)
+                    {
+                        Color baseColor = solidBrush.Color;
+                        Color lineColorWithOpacity = Color.FromArgb(TrendLineOpacity, baseColor.R, baseColor.G, baseColor.B);
+                        SolidColorBrush brushWithOpacity = new SolidColorBrush(lineColorWithOpacity);
+                        string tag = $"zigzag_{pivotA.PivotBar.BarNumber}_{pivotB.PivotBar.BarNumber}";
+                        Draw.Line(this, tag, false, barsAgoA, priceA, barsAgoB, priceB, brushWithOpacity, TrendLineDashStyle, TrendLineWidth);
+                    }
+                }
+
+                if (_pivots.Count > PivotLimit)
+                {
+                    PivotPoint oldPivot = _pivots[0];
+                    if (oldPivot.IsDrawn)
+                    {
+                        RemoveDrawObject($"pivot_{oldPivot.PivotBar.BarNumber}");
+                    }
+                    _pivots.RemoveAt(0);
+                }
+
                 _isLookingForHigh = true;
                 _currentMaxHigh = High[0];
                 _maxHighBar = CurrentBar;
@@ -467,43 +570,21 @@ namespace NinjaTrader.NinjaScript.Indicators
             return pivot.IsHigh ? pivot.PivotBar.High : pivot.PivotBar.Low;
         }
 
-        private static double GetPivotLevelPrice(PivotPoint pivot)
+        private double GetPivotLevelPrice(PivotPoint pivot)
         {
-            return pivot.PivotBar.Close;
-        }
-
-        private void DrawHistoricalZigZag()
-        {
-            for (int i = 0; i < _pivots.Count - 1; i++)
+            switch (LevelPriceType)
             {
-                PivotPoint pivotA = _pivots[i];
-                PivotPoint pivotB = _pivots[i + 1];
-                int barsAgoA = CurrentBar - pivotA.PivotBar.BarNumber;
-                int barsAgoB = CurrentBar - pivotB.PivotBar.BarNumber;
-                double priceA = GetPivotPrice(pivotA);
-                double priceB = GetPivotPrice(pivotB);
-
-                SolidColorBrush solidBrush = TrendLineColor as SolidColorBrush;
-                if (solidBrush == null)
-                    continue;
-                Color baseColor = solidBrush.Color;
-                Color lineColorWithOpacity = Color.FromArgb(
-                    TrendLineOpacity,
-                    baseColor.R,
-                    baseColor.G,
-                    baseColor.B
-                );
-                SolidColorBrush brushWithOpacity = new SolidColorBrush(lineColorWithOpacity);
-                string tag = $"zigzag_{pivotA.PivotBar.BarNumber}_{pivotB.PivotBar.BarNumber}";
-                Draw.Line(this, tag, false, barsAgoA, priceA, barsAgoB, priceB, brushWithOpacity, TrendLineDashStyle, TrendLineWidth);
+                case LevelPriceType.Close:
+                    return pivot.PivotBar.Close;
+                case LevelPriceType.HighLow:
+                    return pivot.IsHigh ? pivot.PivotBar.High : pivot.PivotBar.Low;
+                default:
+                    return pivot.PivotBar.Close;
             }
         }
 
         private void UpdatePivotStatus()
         {
-            if (!IsFirstTickOfBar)
-                return;
-
             double threshold = _tickSize * ThresholdTicks;
 
             foreach (var pivot in _pivots)
@@ -566,21 +647,47 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         private void DrawFill()
         {
+            if (ChartBars == null || ChartBars.Bars == null)
+                return;
+
             double mid = _ema[0];
             double rawAtr = _atr[0];
-
             ATRUpper[0] = mid + rawAtr;
             ATRLower[0] = mid - rawAtr;
             EMAUpper[0] = _emaHigh[0];
             EMALower[0] = _emaLow[0];
 
-            Brush upperFillBrush = UpperFillColor.Clone();
-            upperFillBrush.Opacity = UpperFillOpacity / 255.0;
-            Brush lowerFillBrush = LowerFillColor.Clone();
-            lowerFillBrush.Opacity = LowerFillOpacity / 255.0;
+            var upperBrush = UpperFillColor.Clone();
+            upperBrush.Opacity = UpperFillOpacity / 255.0;
+            var lowerBrush = LowerFillColor.Clone();
+            lowerBrush.Opacity = LowerFillOpacity / 255.0;
+            var formingBrush = FormingFillColor.Clone();
+            formingBrush.Opacity = FormingFillOpacity / 255.0;
 
-            Draw.Region(this, "UpperFill", CurrentBar, 0, ATRUpper, EMAUpper, upperFillBrush, upperFillBrush, UpperFillOpacity);
-            Draw.Region(this, "LowerFill", CurrentBar, 0, EMALower, ATRLower, lowerFillBrush, lowerFillBrush, LowerFillOpacity);
+            // Static
+            if (IsFirstTickOfBar)
+            {
+                Draw.Region(this, "HistUpper",
+                            CurrentBar, 1,
+                            ATRUpper, EMAUpper,
+                            upperBrush, upperBrush, UpperFillOpacity);
+
+                Draw.Region(this, "HistLower",
+                            CurrentBar, 1,
+                            EMALower, ATRLower,
+                            lowerBrush, lowerBrush, LowerFillOpacity);
+            }
+
+            // Dynamic
+            Draw.Region(this, "LiveUpper",
+                        1, 0,
+                        ATRUpper, EMAUpper,
+                        formingBrush, formingBrush, FormingFillOpacity);
+
+            Draw.Region(this, "LiveLower",
+                        1, 0,
+                        EMALower, ATRLower,
+                        formingBrush, formingBrush, FormingFillOpacity);
         }
 
         #endregion
@@ -594,18 +701,18 @@ namespace NinjaTrader.NinjaScript.Indicators
     public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
     {
         private TrustMeBro[] cacheTrustMeBro;
-        public TrustMeBro TrustMeBro(int period, int thresholdTicks, Brush upperFillColor, Brush lowerFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte trendLineOpacity, byte levelOpacity)
+        public TrustMeBro TrustMeBro(int period, int thresholdTicks, int pivotLimit, LevelPriceType levelPriceType, Brush upperFillColor, Brush lowerFillColor, Brush formingFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte formingFillOpacity, byte trendLineOpacity, byte levelOpacity)
         {
-            return TrustMeBro(Input, period, thresholdTicks, upperFillColor, lowerFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, trendLineOpacity, levelOpacity);
+            return TrustMeBro(Input, period, thresholdTicks, pivotLimit, levelPriceType, upperFillColor, lowerFillColor, formingFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, formingFillOpacity, trendLineOpacity, levelOpacity);
         }
 
-        public TrustMeBro TrustMeBro(ISeries<double> input, int period, int thresholdTicks, Brush upperFillColor, Brush lowerFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte trendLineOpacity, byte levelOpacity)
+        public TrustMeBro TrustMeBro(ISeries<double> input, int period, int thresholdTicks, int pivotLimit, LevelPriceType levelPriceType, Brush upperFillColor, Brush lowerFillColor, Brush formingFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte formingFillOpacity, byte trendLineOpacity, byte levelOpacity)
         {
             if (cacheTrustMeBro != null)
                 for (int idx = 0; idx < cacheTrustMeBro.Length; idx++)
-                    if (cacheTrustMeBro[idx] != null && cacheTrustMeBro[idx].Period == period && cacheTrustMeBro[idx].ThresholdTicks == thresholdTicks && cacheTrustMeBro[idx].UpperFillColor == upperFillColor && cacheTrustMeBro[idx].LowerFillColor == lowerFillColor && cacheTrustMeBro[idx].TrendLineColor == trendLineColor && cacheTrustMeBro[idx].TrendLineDashStyle == trendLineDashStyle && cacheTrustMeBro[idx].TrendLineWidth == trendLineWidth && cacheTrustMeBro[idx].LevelColor == levelColor && cacheTrustMeBro[idx].LevelDashStyle == levelDashStyle && cacheTrustMeBro[idx].LevelWidth == levelWidth && cacheTrustMeBro[idx].ATRUpperOpacity == aTRUpperOpacity && cacheTrustMeBro[idx].ATRLowerOpacity == aTRLowerOpacity && cacheTrustMeBro[idx].EMAUpperOpacity == eMAUpperOpacity && cacheTrustMeBro[idx].EMALowerOpacity == eMALowerOpacity && cacheTrustMeBro[idx].UpperFillOpacity == upperFillOpacity && cacheTrustMeBro[idx].LowerFillOpacity == lowerFillOpacity && cacheTrustMeBro[idx].TrendLineOpacity == trendLineOpacity && cacheTrustMeBro[idx].LevelOpacity == levelOpacity && cacheTrustMeBro[idx].EqualsInput(input))
+                    if (cacheTrustMeBro[idx] != null && cacheTrustMeBro[idx].Period == period && cacheTrustMeBro[idx].ThresholdTicks == thresholdTicks && cacheTrustMeBro[idx].PivotLimit == pivotLimit && cacheTrustMeBro[idx].LevelPriceType == levelPriceType && cacheTrustMeBro[idx].UpperFillColor == upperFillColor && cacheTrustMeBro[idx].LowerFillColor == lowerFillColor && cacheTrustMeBro[idx].FormingFillColor == formingFillColor && cacheTrustMeBro[idx].TrendLineColor == trendLineColor && cacheTrustMeBro[idx].TrendLineDashStyle == trendLineDashStyle && cacheTrustMeBro[idx].TrendLineWidth == trendLineWidth && cacheTrustMeBro[idx].LevelColor == levelColor && cacheTrustMeBro[idx].LevelDashStyle == levelDashStyle && cacheTrustMeBro[idx].LevelWidth == levelWidth && cacheTrustMeBro[idx].ATRUpperOpacity == aTRUpperOpacity && cacheTrustMeBro[idx].ATRLowerOpacity == aTRLowerOpacity && cacheTrustMeBro[idx].EMAUpperOpacity == eMAUpperOpacity && cacheTrustMeBro[idx].EMALowerOpacity == eMALowerOpacity && cacheTrustMeBro[idx].UpperFillOpacity == upperFillOpacity && cacheTrustMeBro[idx].LowerFillOpacity == lowerFillOpacity && cacheTrustMeBro[idx].FormingFillOpacity == formingFillOpacity && cacheTrustMeBro[idx].TrendLineOpacity == trendLineOpacity && cacheTrustMeBro[idx].LevelOpacity == levelOpacity && cacheTrustMeBro[idx].EqualsInput(input))
                         return cacheTrustMeBro[idx];
-            return CacheIndicator<TrustMeBro>(new TrustMeBro() { Period = period, ThresholdTicks = thresholdTicks, UpperFillColor = upperFillColor, LowerFillColor = lowerFillColor, TrendLineColor = trendLineColor, TrendLineDashStyle = trendLineDashStyle, TrendLineWidth = trendLineWidth, LevelColor = levelColor, LevelDashStyle = levelDashStyle, LevelWidth = levelWidth, ATRUpperOpacity = aTRUpperOpacity, ATRLowerOpacity = aTRLowerOpacity, EMAUpperOpacity = eMAUpperOpacity, EMALowerOpacity = eMALowerOpacity, UpperFillOpacity = upperFillOpacity, LowerFillOpacity = lowerFillOpacity, TrendLineOpacity = trendLineOpacity, LevelOpacity = levelOpacity }, input, ref cacheTrustMeBro);
+            return CacheIndicator<TrustMeBro>(new TrustMeBro() { Period = period, ThresholdTicks = thresholdTicks, PivotLimit = pivotLimit, LevelPriceType = levelPriceType, UpperFillColor = upperFillColor, LowerFillColor = lowerFillColor, FormingFillColor = formingFillColor, TrendLineColor = trendLineColor, TrendLineDashStyle = trendLineDashStyle, TrendLineWidth = trendLineWidth, LevelColor = levelColor, LevelDashStyle = levelDashStyle, LevelWidth = levelWidth, ATRUpperOpacity = aTRUpperOpacity, ATRLowerOpacity = aTRLowerOpacity, EMAUpperOpacity = eMAUpperOpacity, EMALowerOpacity = eMALowerOpacity, UpperFillOpacity = upperFillOpacity, LowerFillOpacity = lowerFillOpacity, FormingFillOpacity = formingFillOpacity, TrendLineOpacity = trendLineOpacity, LevelOpacity = levelOpacity }, input, ref cacheTrustMeBro);
         }
     }
 }
@@ -614,14 +721,14 @@ namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
 {
     public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
     {
-        public Indicators.TrustMeBro TrustMeBro(int period, int thresholdTicks, Brush upperFillColor, Brush lowerFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte trendLineOpacity, byte levelOpacity)
+        public Indicators.TrustMeBro TrustMeBro(int period, int thresholdTicks, int pivotLimit, LevelPriceType levelPriceType, Brush upperFillColor, Brush lowerFillColor, Brush formingFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte formingFillOpacity, byte trendLineOpacity, byte levelOpacity)
         {
-            return indicator.TrustMeBro(Input, period, thresholdTicks, upperFillColor, lowerFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, trendLineOpacity, levelOpacity);
+            return indicator.TrustMeBro(Input, period, thresholdTicks, pivotLimit, levelPriceType, upperFillColor, lowerFillColor, formingFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, formingFillOpacity, trendLineOpacity, levelOpacity);
         }
 
-        public Indicators.TrustMeBro TrustMeBro(ISeries<double> input, int period, int thresholdTicks, Brush upperFillColor, Brush lowerFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte trendLineOpacity, byte levelOpacity)
+        public Indicators.TrustMeBro TrustMeBro(ISeries<double> input, int period, int thresholdTicks, int pivotLimit, LevelPriceType levelPriceType, Brush upperFillColor, Brush lowerFillColor, Brush formingFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte formingFillOpacity, byte trendLineOpacity, byte levelOpacity)
         {
-            return indicator.TrustMeBro(input, period, thresholdTicks, upperFillColor, lowerFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, trendLineOpacity, levelOpacity);
+            return indicator.TrustMeBro(input, period, thresholdTicks, pivotLimit, levelPriceType, upperFillColor, lowerFillColor, formingFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, formingFillOpacity, trendLineOpacity, levelOpacity);
         }
     }
 }
@@ -630,14 +737,14 @@ namespace NinjaTrader.NinjaScript.Strategies
 {
     public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
     {
-        public Indicators.TrustMeBro TrustMeBro(int period, int thresholdTicks, Brush upperFillColor, Brush lowerFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte trendLineOpacity, byte levelOpacity)
+        public Indicators.TrustMeBro TrustMeBro(int period, int thresholdTicks, int pivotLimit, LevelPriceType levelPriceType, Brush upperFillColor, Brush lowerFillColor, Brush formingFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte formingFillOpacity, byte trendLineOpacity, byte levelOpacity)
         {
-            return indicator.TrustMeBro(Input, period, thresholdTicks, upperFillColor, lowerFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, trendLineOpacity, levelOpacity);
+            return indicator.TrustMeBro(Input, period, thresholdTicks, pivotLimit, levelPriceType, upperFillColor, lowerFillColor, formingFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, formingFillOpacity, trendLineOpacity, levelOpacity);
         }
 
-        public Indicators.TrustMeBro TrustMeBro(ISeries<double> input, int period, int thresholdTicks, Brush upperFillColor, Brush lowerFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte trendLineOpacity, byte levelOpacity)
+        public Indicators.TrustMeBro TrustMeBro(ISeries<double> input, int period, int thresholdTicks, int pivotLimit, LevelPriceType levelPriceType, Brush upperFillColor, Brush lowerFillColor, Brush formingFillColor, Brush trendLineColor, DashStyleHelper trendLineDashStyle, int trendLineWidth, Brush levelColor, DashStyleHelper levelDashStyle, int levelWidth, byte aTRUpperOpacity, byte aTRLowerOpacity, byte eMAUpperOpacity, byte eMALowerOpacity, byte upperFillOpacity, byte lowerFillOpacity, byte formingFillOpacity, byte trendLineOpacity, byte levelOpacity)
         {
-            return indicator.TrustMeBro(input, period, thresholdTicks, upperFillColor, lowerFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, trendLineOpacity, levelOpacity);
+            return indicator.TrustMeBro(input, period, thresholdTicks, pivotLimit, levelPriceType, upperFillColor, lowerFillColor, formingFillColor, trendLineColor, trendLineDashStyle, trendLineWidth, levelColor, levelDashStyle, levelWidth, aTRUpperOpacity, aTRLowerOpacity, eMAUpperOpacity, eMALowerOpacity, upperFillOpacity, lowerFillOpacity, formingFillOpacity, trendLineOpacity, levelOpacity);
         }
     }
 }
