@@ -19,4 +19,8 @@
 
 Add-On Download: https://github.com/WaleeTheRobot/trust-me-bro/releases
 
-NinjaTrader Ecosystem: https://ninjatraderecosystem.com/user-app-share-download/trust-me-bro-atr-ema-trend-line-and-levels
+## Nerd Stuff
+
+- Line based on Kalman Filter, which dynamically updates its estimates based on the autocorrelation previous values with volatility consideration.
+  -- Slightly increase Q if you think the line is not responding quick enough to changes.
+  -- Slightly increase R if you think the line is reacting too much to changes.
