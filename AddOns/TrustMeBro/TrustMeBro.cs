@@ -1,3 +1,5 @@
+using NinjaTrader.Custom.AddOns.TrustMeBro;
+using NinjaTrader.Custom.AddOns.TrustMeBro.Events;
 using NinjaTrader.Custom.AddOns.TrustMeBro.NerdStuff;
 using NinjaTrader.Gui;
 using NinjaTrader.Gui.Chart;
@@ -92,6 +94,8 @@ namespace NinjaTrader.NinjaScript.Indicators
         private List<double> _closeWindow;
         private List<double> _highWindow;
         private List<double> _lowWindow;
+
+        public Series<double> KfCloseSeries => _kfCloseSeries;
 
         #region General Properties
 
@@ -369,6 +373,9 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
             else if (State == State.DataLoaded)
             {
+                string key = Instrument.FullName + "_" + BarsPeriod.Value + "_" + BarsPeriod.BarsPeriodType;
+                TrustMeBroService.Register(key, this);
+
                 _atr = ATR(Period);
                 _previousBar = new PivotBar(CurrentBar, 0, 0, 0, 0);
                 _pivots = new List<PivotPoint>(PivotLimit);
@@ -397,6 +404,11 @@ namespace NinjaTrader.NinjaScript.Indicators
                 Plots[3].Opacity = ATRUpperOpacity;
                 Plots[4].Opacity = ATRLowerOpacity;
             }
+            else if (State == State.Terminated)
+            {
+                string key = Instrument.FullName + "_" + BarsPeriod.Value + "_" + BarsPeriod.BarsPeriodType;
+                TrustMeBroService.Unregister(key);
+            }
         }
 
         protected override void OnBarUpdate()
@@ -424,6 +436,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 
                 UpdatePivotStatus();
                 DrawPivotLevels();
+
+                DataEvents.FirstTickOfBarDone();
             }
 
             UpdateKFSeries();
@@ -499,6 +513,8 @@ namespace NinjaTrader.NinjaScript.Indicators
             double kfLowEstimate = _kfLow.Update(Low[0]);
             _kfLowSeries[0] = kfLowEstimate;
             Values[2][0] = kfLowEstimate;
+
+            DataEvents.KFSeriesUpdated();
         }
 
         private void UpdateKFParams(KalmanFilter1D filter, List<double> inputSeries)
