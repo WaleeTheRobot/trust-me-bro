@@ -8,6 +8,7 @@
 - Lags just enough to feel real
 - Uses some secret sauce and a sprinkle of hope
 - Repaints, but like… for good reasons
+- Rely on questionable science for real results
 
 ## Reviews
 
